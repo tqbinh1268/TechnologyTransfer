@@ -131,7 +131,6 @@ io.on('connection', (socket) => {
     updateLeaderboard();
     socket.emit('joined', { name: state.players[playerId].name, score: state.players[playerId].score });
   });
-  });
 
   socket.on('submit_answer', (answer) => {
     if (state.activeQuestion === null) {
