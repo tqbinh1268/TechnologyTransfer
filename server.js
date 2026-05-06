@@ -237,14 +237,6 @@ io.on('connection', (socket) => {
             io.to(playerId).emit('question_result', { win: false, earned: 0, score: state.players[playerId] ? state.players[playerId].score : 0, message: "Ối giời ơi, sai bét! Chúc bạn may mắn câu sau nhé 🥲" });
           }
         });
-            }
-          } else {
-            // Wrong
-            if (clientSocket) {
-                clientSocket.emit('question_result', { win: false, earned: 0, score: state.players[socketId] ? state.players[socketId].score : 0, message: "Ối giời ơi, sai bét! Chúc bạn may mắn câu sau nhé 🥲" });
-            }
-          }
-        });
       }
 
       state.activeQuestion = null; // Close question
