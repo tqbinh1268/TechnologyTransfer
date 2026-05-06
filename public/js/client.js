@@ -53,14 +53,31 @@ btnSubmitVertical.addEventListener('click', () => {
 let currentActiveQuestion = null;
 let cwLayout = [];
 
+
+let playerId = localStorage.getItem('playerId');
+if (!playerId) {
+  playerId = Math.random().toString(36).substring(2, 15);
+  localStorage.setItem('playerId', playerId);
+}
+
+socket.on('connect', () => {
+  const savedName = localStorage.getItem('playerName');
+  if (savedName) {
+    inputName.value = savedName;
+    socket.emit('join_game', { playerId, name: savedName });
+  }
+});
+
 btnJoin.addEventListener('click', () => {
   const name = inputName.value.trim();
   if (name.length < 2) {
     alert("Vui lòng nhập tên hợp lệ (ít nhất 2 ký tự).");
     return;
   }
-  socket.emit('join_game', name);
+  localStorage.setItem('playerName', name);
+  socket.emit('join_game', { playerId, name });
 });
+
 
 btnSubmit.addEventListener('click', () => {
   if(window.SoundManager) window.SoundManager.playPop();

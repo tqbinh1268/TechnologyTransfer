@@ -107,12 +107,30 @@ io.on('connection', (socket) => {
     gameLogs: gameLogs
   });
 
-  socket.on('join_game', (name) => {
-    state.players[socket.id] = { name: name.trim(), score: 0 };
-    addLog(`👤 Người chơi "${name.trim()}" đã tham gia.`);
-    console.log(`${state.players[socket.id].name} joined.`);
+  socket.on('join_game', (data) => {
+    let name = '';
+    let playerId = socket.id;
+
+    if (typeof data === 'object') {
+       name = data.name.trim();
+       playerId = data.playerId;
+    } else {
+       name = data.trim();
+    }
+
+    socket.playerId = playerId;
+    socket.join(playerId);
+
+    if (!state.players[playerId]) {
+      state.players[playerId] = { name: name, score: 0 };
+      addLog(`👤 Người chơi "${name}" đã tham gia.`);
+    } else {
+      state.players[playerId].name = name;
+    }
+
     updateLeaderboard();
-    socket.emit('joined', { name: state.players[socket.id].name, score: 0 });
+    socket.emit('joined', { name: state.players[playerId].name, score: state.players[playerId].score });
+  });
   });
 
   socket.on('submit_answer', (answer) => {
@@ -126,11 +144,11 @@ io.on('connection', (socket) => {
       return;
     }
     
-    state.currentAnswers[socket.id] = {
+    state.currentAnswers[socket.playerId] = {
       answer: answer.trim().toUpperCase(),
       time: Date.now()
     };
-    const pName = state.players[socket.id] ? state.players[socket.id].name : "Ẩn danh";
+    const pName = state.players[socket.playerId] ? state.players[socket.playerId].name : "Ẩn danh";
     addLog(`✍️ ${pName} đã nộp đáp án: "${answer.trim().toUpperCase()}"`);
     
     socket.emit('answer_received', { message: 'Đã lưu đáp án! Cùng nín thở chờ kết quả nhé... 🫣' });
@@ -144,8 +162,8 @@ io.on('connection', (socket) => {
     }
     
     state.verticalBuzzer.locked = true;
-    state.verticalBuzzer.bySocketId = socket.id;
-    state.verticalBuzzer.playerName = state.players[socket.id] ? state.players[socket.id].name : "Ẩn danh";
+    state.verticalBuzzer.bySocketId = socket.playerId;
+    state.verticalBuzzer.playerName = state.players[socket.playerId] ? state.players[socket.playerId].name : "Ẩn danh";
     state.verticalBuzzer.answerSubmitted = null;
     state.verticalBuzzer.answerSubmitted = null;
 
@@ -154,7 +172,7 @@ io.on('connection', (socket) => {
     socket.emit('buzzer_granted', { timeout: 30, hint: getGame().verticalAnswerHint });
 
     state.verticalBuzzer.timeoutId = setTimeout(() => {
-      if (state.verticalBuzzer.bySocketId === socket.id && !state.verticalBuzzer.answerSubmitted) {
+      if (state.verticalBuzzer.bySocketId === socket.playerId && !state.verticalBuzzer.answerSubmitted) {
          io.emit('answer_feedback', { success: false, message: `Hết 30 giây! ${state.verticalBuzzer.playerName} chưa kịp trả lời.` });
          state.verticalBuzzer.locked = false;
          state.verticalBuzzer.bySocketId = null;
@@ -165,7 +183,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('submit_vertical', (answer) => {
-     if (state.verticalBuzzer.bySocketId !== socket.id) return;
+     if (state.verticalBuzzer.bySocketId !== socket.playerId) return;
      
      if (state.verticalBuzzer.timeoutId) {
         clearTimeout(state.verticalBuzzer.timeoutId);
@@ -197,25 +215,28 @@ io.on('connection', (socket) => {
       let fastestTime = Infinity;
 
       if (state.activeQuestion === index) {
-        Object.entries(state.currentAnswers).forEach(([socketId, data]) => {
-          const clientSocket = io.sockets.sockets.get(socketId);
+        Object.entries(state.currentAnswers).forEach(([playerId, data]) => {
           if (data.answer === correctAnswer) {
             // Correct
             const timeTaken = data.time - activeQuestionStartTime;
             if (timeTaken < fastestTime) {
                 fastestTime = timeTaken;
-                fastestPlayer = state.players[socketId] ? state.players[socketId].name : "Ẩn danh";
+                fastestPlayer = state.players[playerId] ? state.players[playerId].name : "Ẩn danh";
             }
             const baseScore = 100;
             const timePenalty = Math.floor((timeTaken / 1000) * 2);
             let earned = baseScore - timePenalty;
             if (earned < 20) earned = 20;
 
-            if (state.players[socketId]) {
-              state.players[socketId].score += earned;
+            if (state.players[playerId]) {
+              state.players[playerId].score += earned;
             }
-            if (clientSocket) {
-                clientSocket.emit('question_result', { win: true, earned, score: state.players[socketId].score, message: `Tuyệt Vời! Bạn nộp bài nhanh và được cộng ${earned} điểm! 🎉` });
+            io.to(playerId).emit('question_result', { win: true, earned, score: state.players[playerId].score, message: `Tuyệt Vời! Bạn nộp bài nhanh và được cộng ${earned} điểm! 🎉` });
+          } else {
+            // Wrong
+            io.to(playerId).emit('question_result', { win: false, earned: 0, score: state.players[playerId] ? state.players[playerId].score : 0, message: "Ối giời ơi, sai bét! Chúc bạn may mắn câu sau nhé 🥲" });
+          }
+        });
             }
           } else {
             // Wrong
